@@ -1,138 +1,89 @@
 import sys
+from locations.locations import locations
+from people import people
 from time import sleep
-from locations import locations
 import re
 import json
 
 
-def get_cmd():
-  print("->", end='', flush=True)
-  cmd = input().lower()
-  return cmd 
-
-def out(string):
-  string += "\n"
-  for char in string:
+class Game:
+  def __init__(self, locations):
+    self.locations = locations
+    self.location = locations["Home"](self)
+    self.player = {
+    }
+    self.commands = {
+    }
+  
+  def out(self, string, clear=False):
+    if clear:
+      print("\033[H\033[J", end="")
+    string += "\n"
+    for char in string:
       sleep(0.01)
       print(char, end='', flush=True)
 
+  def get_cmd(self, ignore_case=True):
+    print("->", end='', flush=True)
+    cmd = input()
+    if ignore_case:
+        cmd = cmd.lower()
+    return cmd 
 
-player = {
-  "name": "",
-  "location": "Home",
-  "inventory": []
-}
+  def new_game(self):
+    self.player = {
+      "name": "",
+      "gender": "",
+      "location": self.location.name,
+      "inventory": [],
+      "gold": 0
+    }
+    self.set_name()
+    self.out("Welcome, " + self.player["name"], clear=True)
+    self.location.init()
 
-
-def init():
-  cmd = get_cmd()
-  if cmd == "new":
-    return "new_game"
-  return cmd
-
-def invalid():
-  out("INVALID ACTION")
-  return None
-
-
-def new_game():
-  set_name()
-  print("\033[H\033[J", end="")
-  out("Welcome, " + player["name"])
-  return "location_enter"
-
-def set_name(): 
-  out("What is your name?")
-  name = get_cmd()
-  player["name"] = name 
-
-def location_enter(option=""):
-  location = locations[player["location"]]
-  if option != "skip":
-    out(location.intro)
-  out("What would you like to do?")
-  for action in location.actions:
-    out("\t<" + action.upper() + ">")
-  cmd = get_cmd()
-  return "location_action#" + cmd
-
-def location_action(action):
-  location = locations[player["location"]]
-
-  #either do the action or reenter the room
-  if action in location.actions:
-    return location.actions[action]["action"]()
-  else:
-    return action 
-
-def location_change(destination):
-  options = locations[player["location"]].go_options
-  if destination in options:
-    player["location"] = options[destination]["location"]
-  return "location_enter"
+  def set_name(self): 
+    self.out("What is your name?")
+    name = self.get_cmd(ignore_case=False)
+    self.player["name"] = name 
 
 
-def save_game():
-  out("Game Saved")
-  with open('player.save', 'w+') as outfile:
-    json.dump(player, outfile)
-
-def load_game():
-  with open('player.save') as infile:
-    player = json.load(infile)
-  print("\033[H\033[J", end="")
-  out("Welcome back, " + player["name"])
-
-
-commands = {
-  "init": init,
-  "new_game": new_game,
-  "load_game": None, 
-  "location_change": location_change,
-  "location_enter": location_enter,
-  "location_action": location_action,
-}
-
-
-
-def run_command(current_command):
-  pieces = current_command.split("#")
-  cmd = pieces[0] 
-  params = []
-  for i in range(0, len(pieces)):
-    if i != 0:
-      params.append(pieces[i])
-
-  if cmd == "exit":
-    return cmd, ""
-  elif cmd == "save":
-    save_game()
-    return "location_enter#skip" 
-  elif cmd == "load":
-    load_game()
-    return "location_enter" 
-
-  else:
-    if cmd not in commands:
-      invalid()
-      return "location_enter" 
-    if len(params) == 0:
-      next_command = commands[cmd]()
-    elif len(params) == 1:
-      next_command = commands[cmd](params[0])
+  def run(self):
+    self.out("Welcome to Benzay. Would you like to start a <NEW> game or <LOAD> an existing game.", clear=True)
+    cmd = self.get_cmd()
+    if cmd == "new":
+      self.new_game()
+    elif cmd == "load":
+      self.load_game()
     else:
-      next_command = commands[cmd] (params)
+      self.run()
 
-    if next_command == None:
-      invalid()
-      next_command = current_command
-    return next_command
+  def invalid(self, cmd):
+    if cmd == "exit":
+      sys.exit()
+    elif cmd == "save":
+      self.save_game()
+    elif cmd == "gold":
+      self.out("You have " + str(self.player["gold"]) + " gold")
+    elif cmd == "restart":
+      self.run()
+    else:
+      self.out("INVALID ACTION")
 
-print("\033[H\033[J", end="")
-out("Welcome to Benzay. Would you like to start a <NEW> game or <LOAD> an existing game.")
-cmd = "init"
-last_cmd = ""
-while cmd != "exit":
-  cmd = run_command(cmd)
-print("\033[H\033[J", end="")
-print("Goodbye!")
+  def save_game(self):
+    self.out("Game Saved")
+    with open('player.save', 'w+') as outfile:
+      json.dump(self.player, outfile)
+
+  def load_game(self):
+    self.out("Loading...")
+    with open('player.save') as infile:
+      player = json.load(infile)
+      self.player = player
+    print("\033[H\033[J", end="")
+    self.out("Welcome back, " + self.player["name"])
+    self.location = locations[player["location"]](self)
+    self.location.init()
+
+GAME = Game(locations)
+GAME.run()
